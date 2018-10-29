@@ -11,6 +11,7 @@ module control(
 	// D controls
 	Rs30,
 	Rt0,
+	RtIsRd,
 	RsIsRd,
 	
 	// X controls
@@ -41,7 +42,7 @@ module control(
 	output[18:0] instructionType;
 	
 	// D controls
-	output Rs30, Rt0, RsIsRd;
+	output Rs30, Rt0, RtIsRd, RsIsRd;
 	
 	// X controls
 	output[4:0] ALUop;
@@ -120,11 +121,13 @@ module control(
 	/* BUILD D CONTROLS
 	*	Rs30 - bex
 	*	Rt0 - bex
+	*	RtIsRd - sw
 	*	RsIsRd - jr
 	*/
 	
 	assign Rs30 = instructionType[16];
 	assign Rt0 = instructionType[16];
+	assign RtIsRd = instructionType[9];
 	assign RsIsRd = instructionType[14];
 	
 	/* BUILD X CONTROLS

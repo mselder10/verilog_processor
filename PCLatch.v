@@ -1,9 +1,9 @@
 module PCLatch(clk, en, clr, PCIn, PCOut);
 
 	input clk, en, clr;
-	input[11:0] PCIn;
-	output[11:0] PCOut;
+	input[31:0] PCIn;
+	output[31:0] PCOut;
 	
-	register12	PCReg(PCOut, PCIn, clk, en, clr);
+	register	PCReg(PCOut, PCIn, clk, en, clr);
 
 endmodule

@@ -1,7 +1,7 @@
-module equal12bit(dataA, dataB, isEqual);
+module equal12bit(dataA, dataB, isEqual, nisEqual);
 
 	input[11:0] dataA, dataB;
-	output isEqual;
+	output isEqual, nisEqual;
 	
 	wire[11:0] eqBits;
 	wire[3:0] andWire;
@@ -19,5 +19,6 @@ module equal12bit(dataA, dataB, isEqual);
 	and	eqAND4(andWire[3], eqBits[9], eqBits[10], eqBits[11]);
 
 	and	eqANDend(isEqual, andWire[0], andWire[1], andWire[2], andWire[3]);
+	not	neq(nisEqual, isEqual);
 	
 endmodule
