@@ -171,7 +171,7 @@ module processor(
 	mux3in5	myMux4(.dataA(outirFD[21:17]), .dataB(5'd30), .dataC(outirFD[26:22]), .ctrl(mux4Ctrl), .dataOut(ctrl_readRegA));
 	
 	// RT mux
-	mux3in5	myMux5(.dataA(outirFD[16:12]), .dataB(5'd0), .dataC(outirFD[26:22]), .ctrl(Rt0), .dataOut(ctrl_readRegB));
+	mux3in5	myMux5(.dataA(outirFD[16:12]), .dataB(5'd0), .dataC(outirFD[26:22]), .ctrl(mux5Ctrl), .dataOut(ctrl_readRegB));
 	
 	stall	stallMod(.irFD(outirFD), .irDX(outirDX), .isStall(isStall), .nisStall(nisStall));
 	
@@ -221,7 +221,7 @@ module processor(
 	* Bypass Module
 	*/
 	
-	wire alu3isNEQ, alu3isLT, alu3ovfw;
+	wire alu3isNEQ, alu3isLT, alu3ovfw, memMuxCtrl;
 	wire[1:0] aluAMuxCtrl, aluBMuxCtrl, branchctrl, jumpCtrl;
 	wire[18:0] insnTypeXMOut;
 	wire[31:0] outirXM, dataInA, dataInMux9, dataInB, Ximmediate, aluXOut, dataOOutXM, dataBOutXM, T32bits, branchMuxOut, 
@@ -243,7 +243,7 @@ module processor(
 							
 	// Set up for branch / jump decisions
 	
-	assign T32bits[26:0] = outirDX;
+	assign T32bits[26:0] = outirDX[26:0];
 	assign T32bits[31:27] = PCplus1outDX[31:27];
 	
 	and	brAND1(branchctrl[0], BRDX, alu3isNEQ);
