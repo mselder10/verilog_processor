@@ -21,7 +21,7 @@ module alu(data_operandA, data_operandB, ctrl_ALUopcode, ctrl_shiftamt, data_res
 	not	nb0(bEq0, bnEq0);
 	and	ab0(aandb0, aEq0, bEq0);
 	not	abn0(naandb0, aandb0);						// If sub=1 and a!=b=0, let sub=modEnable[1]
-	and	(subEnable, naandb0, modEnable[1]);			// ctrl==1 if a=b=0, sub=1
+	and	thisAnd(subEnable, naandb0, modEnable[1]);			// ctrl==1 if a=b=0, sub=1
 	and	tri0ctrl(ABmodEn, aandb0, modEnable[1]);	// if ctrl==1, set inputs to adder to z, else, keep as modEnable[1/0]
 	
 	tri32	tri0bus(32'b0, ABmodEn, data_result); //drive

@@ -54,8 +54,8 @@ module mwLatch(
 	input[31:0] PCplus1In;
 	
 	// Instruction outputs
-	input[18:0] insnTypeOut;
-	input[31:0]	irOut;
+	output[18:0] insnTypeOut;
+	output[31:0]	irOut;
 	
 	// Data outputs
 	output[31:0] oDataOut, dDataOut;
@@ -68,8 +68,8 @@ module mwLatch(
 	
 	
 	// Instruction registers
-	register19	insnTp(.data_out(insnTypeOut), .data_in(insnTypeIn), .clk(clk), .en(en), .clr(clr));
 	register	irReg(.data_out(irOut), .data_in(irIn), .clk(clk), .en(en), .clr(clr));
+	register19	insnTp(.data_out(insnTypeOut), .data_in(insnTypeIn), .clk(clk), .en(en), .clr(clr));
 	
 	// Data registers
 	register	oReg(.data_out(oDataOut), .data_in(oDataIn), .clk(clk), .en(en), .clr(clr));

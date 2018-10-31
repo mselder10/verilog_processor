@@ -1,11 +1,14 @@
-module bypass(irDX, irXM, irMW, memMuxCtrl, aluAMuxCtrl, aluBMuxCtrl);
+module bypass(irDX, irXM, irMW, insnDX, insnXM, insnMW, isExcepXM, isExcepMW, memMuxCtrl, aluAMuxCtrl, aluBMuxCtrl, bexCtrl);
 
 	input[31:0] irDX, irXM, irMW;
+	input[18:0]	insnDX, insnXM, insnMW;
+	input isExcepXM, isExcepMW;
 	output memMuxCtrl;
-	output [1:0] aluAMuxCtrl, aluBMuxCtrl;
+	output [1:0] aluAMuxCtrl, aluBMuxCtrl, bexCtrl;
 	
 	wire[4:0] xmmw, dxxmrs1, dxxmrs2, dxmwrs1, dxmwrs2, regEquality;
 	wire[1:0] dxnotxm, regMWbypass;
+	wire nisExcepXM, nisExcepMW;
 	
 	// Reg equality check
 	genvar c;
@@ -38,20 +41,38 @@ module bypass(irDX, irXM, irMW, memMuxCtrl, aluAMuxCtrl, aluBMuxCtrl);
 	assign memMuxCtrl = regEquality[4] ? 1'b1 : 1'b0;
 	
 	/* ALU A MUX CTRL 
-	* D/x(RS1) == X/M(RD) --> ctrl == 01
-	* D/x(RS1) == M/W(RD) --> ctrl == 10
+	* (D/x(RS1) == X/M(RD)) && No XM Exception --> ctrl == 01
+	* (D/x(RS1) == M/W(RD)) && No MW Exception --> ctrl == 10
 	* Else --> ctrl == 00
 	*/
-	assign aluAMuxCtrl[0] = regEquality[0] ? 1'b1 : 1'b0;
-	assign aluAMuxCtrl[1] = regMWbypass[0] ? 1'b1 : 1'b0;
+	
+	not	ntEXXM(nisExcepXM, isExcepXM);
+	not	ntEXMW(nisExcepMW, isExcepMW);
+	
+	and	aluAMUXAND1(aluAMuxCtrl[0], regEquality[0], nisExcepXM);
+	and	aluAMUXAND2(aluAMuxCtrl[1], regMWbypass[0], nisExcepMW);
+	//assign aluAMuxCtrl[0] = regEquality[0] ? 1'b1 : 1'b0;
+	//assign aluAMuxCtrl[1] = regMWbypass[0] ? 1'b1 : 1'b0;
 	
 	/* ALU B MUX CTRL 
-	* D/x(RS2) == X/M(RD) --> ctrl == 01
-	* D/x(RS2) == M/W(RD) --> ctrl == 10
+	* (D/x(RS2) == X/M(RD)) && No XM Exception --> ctrl == 01
+	* (D/x(RS2) == M/W(RD)) && No MW Exception --> ctrl == 10
 	* Else --> ctrl == 00
 	*/
-	assign aluBMuxCtrl[0] = regEquality[2] ? 1'b1 : 1'b0;
-	assign aluBMuxCtrl[1] = regMWbypass[1] ? 1'b1 : 1'b0;
 	
+	and	aluBMUXAND1(aluBMuxCtrl[0], regEquality[2], nisExcepXM);
+	and	aluBMUXAND2(aluBMuxCtrl[1], regMWbypass[1], nisExcepMW);
+	
+	//assign aluBMuxCtrl[0] = regEquality[2] ? 1'b1 : 1'b0;
+	//assign aluBMuxCtrl[1] = regMWbypass[1] ? 1'b1 : 1'b0;
+	
+	/* BEX BYPASSING CONTROL
+	* D/X(OP) == BEX && X/M(OP) == SETX --> ctrl == 01
+	* D/X(OP) == BEX && M/W(OP) == SETX --> ctrl == 10
+	* Else --> ctrl == 00
+	*/
+
+	and	bexAND1(bexCtrl[0], insnDX[16], insnXM[17]);
+	and	bexAND2(bexCtrl[1], insnDX[16], insnMW[17]);
 
 endmodule

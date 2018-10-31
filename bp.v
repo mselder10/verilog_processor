@@ -44,8 +44,8 @@ module bp(
 
 	// Check if correctAddress == nextPC : if so, write 0 to taken
 	
-	equal12bit	eqCheck(.dataA(correctAddress), .dataB(nextPC), .isEqual(isNextPC));
-	not	neq(nisNextPC, isNextPC);
+	equal12bit	eqCheck(.dataA(correctAddress), .dataB(nextPC), .isEqual(isNextPC), .nisEqual(nisNextPC));
+	//not	neq(nisNextPC, isNextPC);
 	
 	/**
 	* ARRAY PORTION OF BRANCH PREDICTOR - REGFILE FORMAT

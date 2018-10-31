@@ -12,6 +12,7 @@ module control(
 	Rs30,
 	Rt0,
 	RtIsRd,
+	RtIsRs,
 	RsIsRd,
 	
 	// X controls
@@ -42,7 +43,7 @@ module control(
 	output[18:0] instructionType;
 	
 	// D controls
-	output Rs30, Rt0, RtIsRd, RsIsRd;
+	output Rs30, Rt0, RtIsRd, RtIsRs, RsIsRd;
 	
 	// X controls
 	output[4:0] ALUop;
@@ -57,7 +58,8 @@ module control(
 	wire[4:0] notOp, notALUOp;
 	wire[10:0] opOption;
 	wire[8:0] aluOption;
-	wire[2:0] aluMux;
+	wire[4:0] aluMux;
+	wire notMD;
 	
 	// Not of ALU/opcode bits
 	genvar c;
@@ -122,35 +124,46 @@ module control(
 	*	Rs30 - bex
 	*	Rt0 - bex
 	*	RtIsRd - sw
-	*	RsIsRd - jr
+	*	RtIsRs - bne, blt
+	*	RsIsRd - jr, bne, blt
 	*/
 	
 	assign Rs30 = instructionType[16];
 	assign Rt0 = instructionType[16];
 	assign RtIsRd = instructionType[9];
-	assign RsIsRd = instructionType[14];
+	
+	or	rtrsOR(RtIsRs, instructionType[12], instructionType[15]);
+	or	rsrdOR(RsIsRd, instructionType[14], instructionType[12], instructionType[15]);
+	//assign RsIsRd = instructionType[14];
 	
 	/* BUILD X CONTROLS
 	* ALUop (5 bit) - for opOption[0]: instruction[6:2]; for bne/blt/bex: 00001; else, 00000
 	* ALUinB - addi, sw, lw
 	* BR - bne
 	* BRlt - blt
-	* JP - j, jal
-	* JR - jr, bex
+	* JP - j, jal, bex
+	* JR - jr
 	*/
 	
-	assign aluMux[0] = opOption[0];
-	or	aluOr1(aluMux[1], opOption[2], opOption[6], opOption[10]);
-	nor	aluOr2(aluMux[2], opOption[0], opOption[2], opOption[6], opOption[10]);
-	tri5	aluMux1(instruction[6:2], aluMux[0], ALUop);	//If opOption[0] --> insn[6:2]
-	tri5	aluMux2(5'b00001, aluMux[1], ALUop);	// If opOption[2], opOption[6], opOption[10] --> 00001
-	tri5	aluMux3(5'b00000, aluMux[2], ALUop);	// Else --> 00000
+	
+	assign aluMux[0] = instructionType[7];
+	assign aluMux[1] = instructionType[8];
+	nor	nor1(notMD, instructionType[7], instructionType[8]);
+	and	andMD(aluMux[2], notMD, opOption[0]);
+	
+	or	aluOr1(aluMux[3], opOption[2], opOption[6], opOption[10]);
+	nor	aluOr2(aluMux[4], opOption[0], opOption[2], opOption[6], opOption[10]);
+	tri5	aluMux1(5'b00000, aluMux[0], ALUop);			// If instructionType[7] --> set ALUop to 00000 (add) 
+	tri5	aluMux2(5'b00001, aluMux[1], ALUop);			// If instructionType[8] --> set ALUop to 00001 (sub)
+	tri5	aluMux3(instruction[6:2], aluMux[2], ALUop);	// If neither of these two AND opOption[0] --> ALUop == instruction[6:2]
+	tri5	aluMux4(5'b00001, aluMux[3], ALUop);			// If opOption[2], opOption[6], opOption[10] --> 00001
+	tri5	aluMux5(5'b00000, aluMux[4], ALUop);			// Else --> 00000
 	
 	or	ORaluinb(ALUinB, instructionType[1], instructionType[9], instructionType[10]);
 	assign BR = instructionType[12];
 	assign BRlt = instructionType[15];
-	or	jpOr(JP, instructionType[11], instructionType[13]);
-	or	jrOr(JR, instructionType[14], instructionType[16]);
+	or	jpOr(JP, instructionType[11], instructionType[13], instructionType[16]);
+	assign JR = instructionType[14];
 	
 	/* BUILD M CONTROLS
 	* DMwe - sw

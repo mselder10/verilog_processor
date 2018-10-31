@@ -8,9 +8,9 @@ module mux2in5(dataA, dataB, ctrl, dataOut);
 	
 	// Ctrl == 0, send dataA
 	not	aCtrl(nctrl, ctrl);
-	tri32	sndA(dataA, nctrl, dataOut);
+	tri5	sndA(dataA, nctrl, dataOut);
 	
 	// Ctrl == 1, send dataB
-	tri32	sndB(dataB, ctrl, dataOut);
+	tri5	sndB(dataB, ctrl, dataOut);
 	
 endmodule

@@ -70,6 +70,7 @@ module processor(
     data_writeReg,                  // O: Data to write to for regfile
     data_readRegA,                  // I: Data from port A of regfile
     data_readRegB                   // I: Data from port B of regfile
+	 
 );
     // Control signals
     input clock, reset;
@@ -89,9 +90,46 @@ module processor(
     output [4:0] ctrl_writeReg, ctrl_readRegA, ctrl_readRegB;
     output [31:0] data_writeReg;
     input [31:0] data_readRegA, data_readRegB;
-
-    /* YOUR CODE STARTS HERE */
-	 
+	
+	// Fetch wires
+	
+	wire[11:0] guessedTarget;
+	wire[31:0] pcLatchIn, pcLatchOut, PCplus1, PCplus1outFD, inirFD, outirFD, Targetpadded, inFDTG, outFDTG, PCoutFD;
+	wire alu1isNEQ, alu1isLT, alu1ovfw, bpTaken, guessedRight, guessedWrong, flushCtrl;
+	
+	// Decode wires
+	
+	wire[31:0] immediate, addImmedout, inirDX, outirDX, PCplus1outDX, PCImmedDX, dataAdxOut, dataBdxOut, outDXTG, PCoutDX;
+	wire[18:0] insnType, insnTypeDXOut;
+	wire[1:0] mux4Ctrl, mux5Ctrl;
+	wire alu2isNEQ, alu2isLT, alu2ovfw, isStall, nisStall;
+	wire Rs30, Rt0, RtIsRs, RtIsRd, RsIsRd, ALUop, ALUinB, BR, BRlt, JP, JR, DMwe, WE, Rwd, jal, Rd30, Rd31, WTtoReg;
+	wire[4:0] ALUopDX, rtInBtwn;
+	wire ALUinBDX, BRDX, BRltDX, JPDX, JRDX, DMweDX, WEDX, RwdDX, jalDX, Rd30DX, Rd31DX, WTtoRegDX;
+	
+	// Execution wires
+	
+	wire alu3isNEQ, alu3isLT, alu3ovfw, memMuxCtrl, notBex;
+	wire[1:0] aluAMuxCtrl, aluBMuxCtrl, bexCtrl, branchctrl, jumpCtrl, jpBit;
+	wire[18:0] insnTypeXMOut;
+	wire[31:0] outirXM, dataInA, dataInMux9, dataInB, Ximmediate, aluXOut, dataOOutXM, dataBOutXM, T32bits, branchMuxOut, 
+				jumpMuxOut;
+	wire WEXM, RwdXM, DMweXM, jalXM, Rd30XM, Rd31XM, WTtoRegXM, MathExcepXM;
+	wire[31:0] PCplus1outXM, aluAMux1, Txm;
+	
+	// Memory wires
+	
+	wire WEMW, RwdMW, jalMW, Rd30MW, Rd31MW, WTtoRegMW, MathExcepMW;
+	wire[18:0] insnTypeMWOut;
+	wire[31:0] outirMW, oDataOutMW, dDataOutMW, PCplus1outMW;
+	
+	// Writeback wires
+	
+	wire[4:0] excepType;
+	wire[31:0] T32setx, wtbackMux1, wtbackMux2, wtbackMux3, wtbackMux4, wtbackMux5, wtbackMux6, wtbackMux7, wtbackMux8;
+	wire[4:0] wRegMux1;
+	wire sendto30;
+	
 	 // Fetch
 	/**
 	* Needed:
@@ -104,9 +142,6 @@ module processor(
 	* Mux (3) btw imem output and nop, controlled by equality of guessed vs. actual branch (flush/stall logic)
 	*/
 	
-	wire[11:0] guessedTarget;
-	wire[31:0] pcLatchIn, pcLatchOut, PCplus1, PCplus1outFD, inirFD, outirFD, Targetpadded, inFDTG, outFDTG, PCoutFD;
-	wire alu1isNEQ, alu1isLT, alu1ovfw, bpTaken, guessedRight, guessedWrong, flushCtrl;
 	
 	PCLatch	pcReg(.clk(clock), .en(nisStall), .clr(reset), .PCIn(pcLatchIn), .PCOut(pcLatchOut));
 	
@@ -115,7 +150,7 @@ module processor(
 	alu	fALU(.data_operandA(32'd1), .data_operandB(pcLatchOut), .ctrl_ALUopcode(5'd0), .ctrl_shiftamt(5'd0), 
 					.data_result(PCplus1), .isNotEqual(alu1isNEQ), .isLessThan(alu1isLT), .overflow(alu1ovfw));
 	
-	bp	branchPredictor(.clock(clock), .clear(reset), .PC(address_imem), .correctAddress(jumpMuxOut[11:0]), 
+	bp	branchPredictor(.clock(clock), .clear(reset), .PC(pcLatchOut[11:0]), .correctAddress(jumpMuxOut[11:0]), 
 							.nextPC(PCplus1outDX[11:0]), .originalPC(PCoutDX[11:0]), .guessedWrong(guessedWrong), 
 							.guessedTarget(guessedTarget), .taken(bpTaken));
 	
@@ -127,14 +162,14 @@ module processor(
 	
 	mux2	myMux1(.dataA(PCplus1), .dataB(Targetpadded), .ctrl(bpTaken), .dataOut(inFDTG));
 	mux2	myMux2(.dataA(jumpMuxOut), .dataB(inFDTG), .ctrl(guessedRight), .dataOut(pcLatchIn));
-	mux2	myMux3(.dataA(32'b00000000000000000000000000100000), .dataB(q_imem), .ctrl(flushCtrl), .dataOut(inirFD));	// 00000000000000000000000000100000 == nop
+	mux2	myMux3(.dataA(q_imem), .dataB(32'b00000000000000000000000000100000), .ctrl(flushCtrl), .dataOut(inirFD));	// 00000000000000000000000000100000 == nop
 	
 	/** FD LATCH
 	*	Components:
 	*		Clock, Enable, Clear, TG, PC, PC + 1, IR
 	*/
 	
-	fdLatch	myFD(.clk(clock), .en(nisStall), .clr(reset), .TGIn(inFDTG), .PCIn(address_imem), .PCplus1In(PCplus1), 
+	fdLatch	myFD(.clk(clock), .en(nisStall), .clr(reset), .TGIn(inFDTG), .PCIn(pcLatchOut), .PCplus1In(PCplus1), 
 						.irIn(inirFD), .TGOut(outFDTG), .PCOut(PCoutFD), .PCplus1Out(PCplus1outFD), .irOut(outirFD));
 	
 	// Decode	
@@ -145,15 +180,10 @@ module processor(
 	* Stall Module
 	* Control Module
 	* Mux (4) btw RS portion of IR, constant 30, and RD portion of IR, controlled by Rs30 and RsIsRd
-	* Mux (5) btw RT portion of IR and constant 0, controlled by Rt0
-	* Mux (6) btw IR output of FD latch and nop, controlled by equality of guessed vs. actual branch (flush/stall logic)
+	* Mux (5) btw RT portion of IR, constant 0, and RD portion of IR, controlled by Rt0 and RtIsRd
+	* Mux (6) btw Mux (5) output and RS portion of IR, controlled by RtIsRs
+	* Mux (7) btw IR output of FD latch and nop, controlled by equality of guessed vs. actual branch (flush/stall logic)
 	*/
-	 
-	wire[31:0] immediate, addImmedout, inirDX, outirDX, PCplus1outDX, PCImmedDX, dataAdxOut, dataBdxOut, outDXTG, PCoutDX;
-	wire[18:0] insnType, insnTypeDXOut;
-	wire[1:0] mux4Ctrl, mux5Ctrl;
-	wire alu2isNEQ, alu2isLT, alu2ovfw, isStall, nisStall;
-	wire Rs30, Rt0, RtIsRd, RsIsRd, ALUop, ALUinB, BR, BRlt, JP, JR, DMwe, WE, Rwd, jal, Rd30, Rd31, WTtoReg;
 	
 	signx	sx1(outirFD[16:0], immediate);
 	
@@ -170,19 +200,17 @@ module processor(
 	// RS mux
 	mux3in5	myMux4(.dataA(outirFD[21:17]), .dataB(5'd30), .dataC(outirFD[26:22]), .ctrl(mux4Ctrl), .dataOut(ctrl_readRegA));
 	
-	// RT mux
-	mux3in5	myMux5(.dataA(outirFD[16:12]), .dataB(5'd0), .dataC(outirFD[26:22]), .ctrl(mux5Ctrl), .dataOut(ctrl_readRegB));
+	// RT muxes
+	mux3in5	myMux5(.dataA(outirFD[16:12]), .dataB(5'd0), .dataC(outirFD[26:22]), .ctrl(mux5Ctrl), .dataOut(rtInBtwn));
+	mux2in5	myMux6(.dataA(rtInBtwn), .dataB(outirFD[21:17]), .ctrl(RtIsRs), .dataOut(ctrl_readRegB));
 	
 	stall	stallMod(.irFD(outirFD), .irDX(outirDX), .isStall(isStall), .nisStall(nisStall));
 	
 	control ctrlMod(.instruction(outirFD), .instructionType(insnType), .Rs30(Rs30), .Rt0(Rt0), .RtIsRd(RtIsRd),
-						.RsIsRd(RsIsRd), .ALUop(ALUop), .ALUinB(ALUinB), .BR(BR), .BRlt(BRlt), .JP(JP), .JR(JR), .DMwe(DMwe), 
-						.WE(WE), .Rwd(Rwd), .jal(jal), .Rd30(Rd30), .Rd31(Rd31), .WTtoReg(WTtoReg));
+						.RtIsRs(RtIsRs), .RsIsRd(RsIsRd), .ALUop(ALUop), .ALUinB(ALUinB), .BR(BR), .BRlt(BRlt), .JP(JP), 
+						.JR(JR), .DMwe(DMwe), .WE(WE), .Rwd(Rwd), .jal(jal), .Rd30(Rd30), .Rd31(Rd31), .WTtoReg(WTtoReg));
 	
-	mux2	myMux6(.dataA(32'b00000000000000000000000000100000), .dataB(outirFD), .ctrl(flushCtrl), .dataOut(inirDX));
-	
-	wire[4:0] ALUopDX;
-	wire ALUinBDX, BRDX, BRltDX, JPDX, JRDX, DMweDX, WEDX, RwdDX, jalDX, Rd30DX, Rd31DX, WTtoRegDX;
+	mux2	myMux7(.dataA(outirFD), .dataB(32'b00000000000000000000000000100000), .ctrl(flushCtrl), .dataOut(inirDX));
 	
 	// DX LATCH
 	dxLatch	myDX(.clk(clock), .en(1'b1), .clr(reset), 
@@ -211,56 +239,65 @@ module processor(
 	/**
 	* Needed:
 	* One ALU (dataInA OP dataInB)
-	* Mux (7) for dataInA (A output of DX, O output of XM, or writeback value (Mux (10) output), controlled by aluAMuxCtrl from bypass
-	* Mux (8) for dataInB (B output of DX, O output of XM, or writeback value), controlled by aluBMuxCtrl from bypass
-	* Mux (9) for dataInB (Mux (8) output or SX Immediate), controlled by ALUinB
-	* Mux (10) btw PC + 1 and PC + 1 + N, controlled by BR or BRlt
-	* Mux (11) btw output of Mux (10) and T, controlled by JP
-	* Mux (12) btw output of Mux (11) and RS data, controlled by JR
+	* Mux (8) for dataInA (A output of DX, O output of XM, or writeback value (Mux (10) output), controlled by aluAMuxCtrl from bypass
+	* Mux (9) for dataInA (Mux (8) output, bypassed T from next two latches, controlled by bexCtrl
+	* Mux (10) for dataInB (B output of DX, O output of XM, or writeback value), controlled by aluBMuxCtrl from bypass
+	* Mux (11) for dataInB (Mux (8) output or SX Immediate), controlled by ALUinB
+	* Mux (12) btw PC + 1 and PC + 1 + N, controlled by BR or BRlt
+	* Mux (13) btw output of Mux (10), T, and RS data, controlled by JP and JR
 	*
 	* Bypass Module
 	*/
 	
-	wire alu3isNEQ, alu3isLT, alu3ovfw, memMuxCtrl;
-	wire[1:0] aluAMuxCtrl, aluBMuxCtrl, branchctrl, jumpCtrl;
-	wire[18:0] insnTypeXMOut;
-	wire[31:0] outirXM, dataInA, dataInMux9, dataInB, Ximmediate, aluXOut, dataOOutXM, dataBOutXM, T32bits, branchMuxOut, 
-				jumpMuxOut;
-	
 	signx	sx2(outirDX[16:0], Ximmediate);
+	
+	
+	
+	assign Txm[26:0] = outirXM[26:0];
+	assign Txm[31:27] = 5'd0;
 	
 	// Muxes for data inputs to ALU
 	
-	mux3	myMux7(.dataA(dataAdxOut), .dataB(dataOOutXM), .dataC(data_writeReg), .ctrl(aluAMuxCtrl), .dataOut(dataInA));
-	mux3	myMux8(.dataA(dataBdxOut), .dataB(dataOOutXM), .dataC(data_writeReg), .ctrl(aluBMuxCtrl), .dataOut(dataInMux9));
-	mux2	myMux9(.dataA(dataInMux9), .dataB(Ximmediate), .ctrl(ALUinBDX), .dataOut(dataInB));
+	mux3	myMux8(.dataA(dataAdxOut), .dataB(dataOOutXM), .dataC(data_writeReg), .ctrl(aluAMuxCtrl), .dataOut(aluAMux1));
+	mux3	myMux9(.dataA(aluAMux1), .dataB(Txm), .dataC(data_writeReg), .ctrl(bexCtrl), .dataOut(dataInA));
+	mux3	myMux10(.dataA(dataBdxOut), .dataB(dataOOutXM), .dataC(data_writeReg), .ctrl(aluBMuxCtrl), .dataOut(dataInMux9));
+	mux2	myMux11(.dataA(dataInMux9), .dataB(Ximmediate), .ctrl(ALUinBDX), .dataOut(dataInB));
 	
 	alu	xALU(.data_operandA(dataInA), .data_operandB(dataInB), .ctrl_ALUopcode(ALUopDX), .ctrl_shiftamt(outirDX[11:7]), 
 					.data_result(aluXOut), .isNotEqual(alu3isNEQ), .isLessThan(alu3isLT), .overflow(alu3ovfw));
 	
-	bypass	bypassMod(.irDX(outirDX), .irXM(outirXM), .irMW(outirMW), .memMuxCtrl(memMuxCtrl), .aluAMuxCtrl(aluAMuxCtrl), 
-							.aluBMuxCtrl(aluBMuxCtrl));
-							
+	//bypass	bypassMod(.irDX(outirDX), .irXM(outirXM), .irMW(outirMW), .memMuxCtrl(memMuxCtrl), .aluAMuxCtrl(aluAMuxCtrl), 
+	//						.aluBMuxCtrl(aluBMuxCtrl));
+						
+	bypass	bypassMod(.irDX(outirDX), .irXM(outirXM), .irMW(outirMW), .insnDX(insnTypeDXOut), .insnXM(insnTypeXMOut),
+							.insnMW(insnTypeMWOut), .isExcepXM(MathExcepXM), .isExcepMW(MathExcepMW), .memMuxCtrl(memMuxCtrl), 
+							.aluAMuxCtrl(aluAMuxCtrl), .aluBMuxCtrl(aluBMuxCtrl), .bexCtrl(bexCtrl));
+	
 	// Set up for branch / jump decisions
 	
 	assign T32bits[26:0] = outirDX[26:0];
-	assign T32bits[31:27] = PCplus1outDX[31:27];
+	assign T32bits[31:27] = 5'd0;
 	
 	and	brAND1(branchctrl[0], BRDX, alu3isNEQ);
 	and	brAND2(branchctrl[1], BRltDX, alu3isLT);
 	
-	assign jumpCtrl[0] = JPDX;
+	// bex/jump logic - If {(isn == bex AND isNotEqual) || (insn != bex)} AND JP
+	
+	and	bexAND1(jpBit[0], insnTypeDXOut[16], alu3isNEQ);
+	not	bexNOT(notBex, insnTypeDXOut[16]);
+	or		bexOR(jpBit[1], jpBit[0], notBex);
+	and	bexAND2(jumpCtrl[0], jpBit[1], JPDX);
+	
+	//assign jumpCtrl[0] = JPDX;
 	assign jumpCtrl[1] = JRDX;
 	
 	// Branching / jumping muxes
-	mux3	myMux10(.dataA(PCplus1outDX), .dataB(PCImmedDX), .dataC(PCImmedDX), .ctrl(branchctrl), .dataOut(branchMuxOut));
-	mux3	myMux11(.dataA(branchMuxOut), .dataB(T32bits), .dataC(dataInA), .ctrl(jumpCtrl), .dataOut(jumpMuxOut));
+	mux3	myMux12(.dataA(PCplus1outDX), .dataB(PCImmedDX), .dataC(PCImmedDX), .ctrl(branchctrl), .dataOut(branchMuxOut));
+	mux3	myMux13(.dataA(branchMuxOut), .dataB(T32bits), .dataC(dataInA), .ctrl(jumpCtrl), .dataOut(jumpMuxOut));
 	
 	// Feedback to branch predictor
 	equal12bit	guessEq(.dataA(jumpMuxOut[11:0]), .dataB(outDXTG[11:0]), .isEqual(guessedRight), .nisEqual(guessedWrong));
 	
-	wire WEXM, RwdXM, DMweXM, jalXM, Rd30XM, Rd31XM, WTtoRegXM, MathExcepXM;
-	wire[31:0] PCplus1outXM;
 	
 	// XM LATCH
 	xmLatch	myXM(.clk(clock), .en(1'b1), .clr(reset),
@@ -282,24 +319,21 @@ module processor(
 			.WTtoRegOut(WTtoRegXM), .MathExcepOut(MathExcepXM),
 			// Address outputs
 			.PCplus1Out(PCplus1outXM));
+			
 	
 	// Memory
 	/**
 	* Needed:
 	* dmem
-	* Mux (13) for dataInMemB (B output of XM or writeback value), controlled by memMuxCtrl from bypass
+	* Mux (14) for dataInMemB (B output of XM or writeback value), controlled by memMuxCtrl from bypass
 	*/
 	
 	assign address_dmem = dataOOutXM[11:0];
 	assign wren = DMweXM;
 	
-	mux2	myMux13(.dataA(dataBOutXM), .dataB(data_writeReg), .ctrl(memMuxCtrl), .dataOut(data));
+	mux2	myMux14(.dataA(dataBOutXM), .dataB(data_writeReg), .ctrl(memMuxCtrl), .dataOut(data));
 	
 	// MW LATCH
-	
-	wire WEMW, RwdMW, jalMW, Rd30MW, Rd31MW, WTtoRegMW, MathExcepMW;
-	wire[18:0] insnTypeMWOut;
-	wire[31:0] outirMW, oDataOutMW, dDataOutMW, PCplus1outMW;
 	
 	mwLatch	myMW(.clk(clock), .en(1'b1), .clr(reset),
 			// Insn inputs
@@ -326,18 +360,18 @@ module processor(
 	/**
 	* Needed:
 	* Writeback Muxes -->
-	* Mux (14) for writeback value (O output or D output), controlled by Rwd
-	* Mux (15) for writeback value (Mux (14) output or PC + 1, controlled by jal
-	* Mux (16) for writeback value (Mux (15) output or 1)
-	* Mux (17) for writeback value (Mux (16) output or 2)
-	* Mux (18) for writeback value (Mux (17) output or 3)
-	* Mux (19) for writeback value (Mux (18) output or 4)
-	* Mux (20) for writeback value (Mux (19) output or 5)
+	* Mux (15) for writeback value (O output or D output), controlled by Rwd
+	* Mux (16) for writeback value (Mux (13) output or PC + 1, controlled by jal
+	* Mux (17) for writeback value (Mux (14) output or T, controlled by WTtoReg
+	* Mux (18) for writeback value (Mux (15) output or 1)
+	* Mux (19) for writeback value (Mux (16) output or 2)
+	* Mux (20) for writeback value (Mux (17) output or 3)
+	* Mux (21) for writeback value (Mux (18) output or 4)
+	* Mux (22) for writeback value (Mux (19) output or 5)
 	* rd muxes -->
-	* Mux (21) for $rd ($rd or $r31), controlled by Rd31
-	* Mux (22) for $rd (Mux (16) or $r30), controlled by Rd30 or MathExcep
+	* Mux (23) for $rd ($rd or $r31), controlled by Rd31
+	* Mux (24) for $rd (Mux (16) or $r30), controlled by Rd30 or MathExcep
 	*/
-	wire[4:0] excepType;
 	
 	// Add and exception
 	and	exAnd1(excepType[0], insnTypeMWOut[0], MathExcepMW);
@@ -356,31 +390,32 @@ module processor(
 	 
 	assign ctrl_writeEnable = WEMW;
 	
-	wire[31:0] wtbackMux1, wtbackMux2, wtbackMux3, wtbackMux4, wtbackMux5, wtbackMux6, wtbackMux7;
-	wire[4:0] wRegMux1;
-	wire sendto30;
 	
 	or	wrt30(sendto30, Rd30MW, MathExcepMW);
 	
+	
+	assign T32setx[26:0] = outirMW[26:0];
+	assign T32setx[31:27] = 5'd0;
+	
 	// Typical writeback muxes
 	
-	mux2	myMux14(.dataA(oDataOutMW), .dataB(dDataOutMW), .ctrl(RwdMW), .dataOut(wtbackMux1));
-	mux2	myMux15(.dataA(wtbackMux1), .dataB(PCplus1outMW), .ctrl(jalMW), .dataOut(wtbackMux2));
+	mux2	myMux15(.dataA(oDataOutMW), .dataB(dDataOutMW), .ctrl(RwdMW), .dataOut(wtbackMux1));
+	mux2	myMux16(.dataA(wtbackMux1), .dataB(PCplus1outMW), .ctrl(jalMW), .dataOut(wtbackMux2));
+	mux2	myMux17(.dataA(wtbackMux2), .dataB(T32setx), .ctrl(WTtoRegMW), .dataOut(wtbackMux3));
 	
 	// Muxes for sending exception data
 	
-	mux2	myMux16(.dataA(wtbackMux2), .dataB(32'd1), .ctrl(excepType[0]), .dataOut(wtbackMux3));
-	mux2	myMux17(.dataA(wtbackMux3), .dataB(32'd2), .ctrl(excepType[1]), .dataOut(wtbackMux4));
-	mux2	myMux18(.dataA(wtbackMux4), .dataB(32'd3), .ctrl(excepType[2]), .dataOut(wtbackMux5));
-	mux2	myMux19(.dataA(wtbackMux5), .dataB(32'd4), .ctrl(excepType[3]), .dataOut(wtbackMux6));
-	mux2	myMux20(.dataA(wtbackMux6), .dataB(32'd5), .ctrl(excepType[4]), .dataOut(wtbackMux7));
+	mux2	myMux18(.dataA(wtbackMux3), .dataB(32'd1), .ctrl(excepType[0]), .dataOut(wtbackMux4));
+	mux2	myMux19(.dataA(wtbackMux4), .dataB(32'd2), .ctrl(excepType[1]), .dataOut(wtbackMux5));
+	mux2	myMux20(.dataA(wtbackMux5), .dataB(32'd3), .ctrl(excepType[2]), .dataOut(wtbackMux6));
+	mux2	myMux21(.dataA(wtbackMux6), .dataB(32'd4), .ctrl(excepType[3]), .dataOut(wtbackMux7));
+	mux2	myMux22(.dataA(wtbackMux7), .dataB(32'd5), .ctrl(excepType[4]), .dataOut(wtbackMux8));
 	
-	assign data_writeReg = wtbackMux7;
+	assign data_writeReg = wtbackMux8;
 	
 	// $rd muxes
 	
-	mux2	myMux21(.dataA(outirMW[26:22]), .dataB(5'd31), .ctrl(Rd31MW), .dataOut(wRegMux1));
-	mux2	myMux22(.dataA(wRegMux1), .dataB(5'd30), .ctrl(sendto30), .dataOut(ctrl_writeReg));
-	 
+	mux2in5	myMux23(.dataA(outirMW[26:22]), .dataB(5'd31), .ctrl(Rd31MW), .dataOut(wRegMux1));
+	mux2in5	myMux24(.dataA(wRegMux1), .dataB(5'd30), .ctrl(sendto30), .dataOut(ctrl_writeReg)); 
 
 endmodule
